@@ -86,7 +86,7 @@ func addInnerEntityFromDirectory(dir string, files *[]FileInfo) error {
 		fmt.Println(err)
 		return err
 	}
-	// проодится по всем полученным элементам и на их основе создает сущность FileInfo(либо папка либо файл)
+	// проходится по всем полученным элементам и на их основе создает сущность FileInfo(либо папка либо файл)
 	// в случае если это папка размер рекурсивно подсчитывается по вложенности
 	for _, entry := range entries {
 		_, err := entry.Info()
