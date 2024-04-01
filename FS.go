@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+// единичный элемент, либо папка либо файл
 type FileInfo struct {
 	Type string
 	Name string
@@ -24,16 +25,17 @@ func main() {
 	// получаем время начала программы
 	startTime := time.Now()
 
-	// путь для предполагаемого файла и дирректории
+	// путь для предполагаемогой дирректории
 	var directorySource string
 	var sortBy string
-
+	// получение параметров из командной строки
 	err := parseParam(&directorySource, &sortBy)
-	//
+
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(0)
 	}
+	// вывести отображение файлов
 	printFiles(directorySource, sortBy)
 
 	fmt.Printf("Время работы программы: %v\n", time.Now().Sub(startTime))
@@ -46,15 +48,16 @@ func parseParam(directorySource *string, sortBy *string) error {
 	flag.Parse()
 
 	// проверка на корректность полученных параметров
-	err := DirectorySrcAndSortedParamIsCorrect(*directorySource, *sortBy)
+	err := directorySrcAndSortedParamIsCorrect(*directorySource, *sortBy)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-// srcAndDstIsCorrect - проверка источника и необходимой дирректории на корректность (true - src: удачный путь к файлу dst: корректная папка)
-func DirectorySrcAndSortedParamIsCorrect(directorySource string, sortBy string) error {
+// directorySrcAndSortedParamIsCorrect - проверка необходимой дирректории на корректность
+// (true - root: удачный путь к файлу sort: корректная папка)
+func directorySrcAndSortedParamIsCorrect(directorySource string, sortBy string) error {
 	if directorySource == "null" || (sortBy != "ASC" && sortBy != "DESC") {
 		return errors.New("Источник или параметр сортировки указаны не верно\n./FS --root='path to directory' --sort='param of sort (default ASC)'")
 	}
@@ -76,13 +79,15 @@ func DirectorySrcAndSortedParamIsCorrect(directorySource string, sortBy string) 
 	return nil
 }
 
-func walkDir(dir string, files *[]FileInfo) {
+// addInnerEntityFromDirectory - метод принимает на вход путь к папке и ссылку на массив, который требует заполнения
+func addInnerEntityFromDirectory(dir string, files *[]FileInfo) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		fmt.Println(err)
-		return
+		return err
 	}
-
+	// проодится по всем полученным элементам и на их основе создает сущность FileInfo(либо папка либо файл)
+	// в случае если это папка размер рекурсивно подсчитывается по вложенности
 	for _, entry := range entries {
 		_, err := entry.Info()
 		if err != nil {
@@ -111,8 +116,11 @@ func walkDir(dir string, files *[]FileInfo) {
 			})
 		}
 	}
+	return nil
 }
 
+// getDirSize - функция подсчета размера элементов, если это файл его размер суммируется с общим размером папки,
+// если это папка то метод рекурсивно заходит в нее и возвращается ощую сумму элементов по тому же принципу
 func getDirSize(dir string) int64 {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -137,6 +145,7 @@ func getDirSize(dir string) int64 {
 	return size
 }
 
+// sortFiles - метод который по принципу описания анонимной функции в sort.Slice описывается поведения для меньшего элемента
 func sortFiles(files []FileInfo, sortBy string) {
 	switch sortBy {
 	case "ASC":
@@ -152,14 +161,18 @@ func sortFiles(files []FileInfo, sortBy string) {
 	}
 }
 
+// printFiles - метод вывода по шаблону заполненного массива, прошедшего сортировку
 func printFiles(directorySource string, sortBy string) {
 	files := []FileInfo{}
-	walkDir(directorySource, &files)
+	addInnerEntityFromDirectory(directorySource, &files)
 	sortFiles(files, sortBy)
 	for _, file := range files {
 		fmt.Printf("%s | %s | %s\n", file.Type, file.Name, formatSize(file.Size))
 	}
 }
+
+// formatSize - метод, который переводит байты в понятные единицы измерения гб, мб, кб
+// метод определяет сколько раз кол-во байт можно поделить на 1024 тем самым определяет ед. измерения
 func formatSize(size int64) string {
 	const unit = 1024
 	if size < unit {
