@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -28,25 +30,58 @@ var noSuchDirectoryError = errors.New("Директории не существ�
 func main() {
 	// получаем время начала программы
 	startTime := time.Now()
+	// Устанавливаем обработчик для корневого пути
+	http.HandleFunc("/files", filesHandler)
 
-	// путь для предполагаемогой дирректории
-	var directorySource string
-	var sortBy string
-	// получение параметров из командной строки
-	err := parseParam(&directorySource, &sortBy)
-
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(0)
-	}
-	// вывести отображение файлов
-	err = printFiles(directorySource, sortBy)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(0)
+	// Запускаем HTTP-сервер на порту 8080
+	fmt.Println("Запуск сервера на http://localhost:8080")
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		fmt.Printf("Ошибка при запуске сервера: %v\n", err)
+		os.Exit(1)
 	}
 
 	fmt.Printf("Время работы программы: %v\n", time.Now().Sub(startTime))
+}
+
+// Обработчик для GET-запросов
+func filesHandler(w http.ResponseWriter, r *http.Request) {
+	// Проверяем, что запрос является GET-запросом
+	if r.Method != http.MethodGet {
+		http.Error(w, "Метод запрещен.", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Получаем параметры запроса
+	rootParam := r.URL.Query().Get("root")
+	sortParam := r.URL.Query().Get("sort")
+	fmt.Print(fmt.Sprintf("%s %s", rootParam, sortParam))
+	if rootParam == "" {
+		fmt.Fprint(w, "Введите параметры root and sort! ?root=&sort=(ASC default)")
+	} else {
+		if sortParam == rootParam || sortParam == "" {
+			sortParam = "ASC"
+		}
+		sortParam = "ASC"
+		fmt.Println(sortParam)
+		err := showFile(&w, rootParam, sortParam)
+
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
+}
+
+func showFile(w *http.ResponseWriter, dirSource string, sort string) error {
+	// путь для предполагаемогой дирректории
+	directorySource := dirSource
+	sortBy := sort
+	fmt.Print(fmt.Sprintf("%s %s", directorySource, sortBy))
+	// вывести отображение файлов
+	err := printFiles(w, directorySource, sortBy)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // parseParam - получение параметров с вызова программы
@@ -181,7 +216,7 @@ func sortFiles(files []FileInfo, sortBy string) error {
 }
 
 // printFiles - метод вывода по шаблону заполненного массива, прошедшего сортировку
-func printFiles(directorySource string, sortBy string) error {
+func printFiles(w *http.ResponseWriter, directorySource string, sortBy string) error {
 	var files []FileInfo
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -193,10 +228,10 @@ func printFiles(directorySource string, sortBy string) error {
 	if err != nil {
 		return err
 	}
-	for _, file := range files {
-		fmt.Printf("%s | %s | %s\n", file.Type, file.Name, mustFormatSize(file.Size))
-	}
+
+	sendJson(w, &files)
 	return nil
+
 }
 
 // formatSize - метод, который переводит байты в понятные единицы измерения гб, мб, кб
@@ -212,4 +247,15 @@ func mustFormatSize(size int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", n, " KMGTPE"[exp])
+}
+
+func sendJson(w *http.ResponseWriter, files *[]FileInfo) error {
+	jsonData, err := json.Marshal(files)
+	if err != nil {
+		return err
+	}
+	(*w).Header().Set("Content-Type", "application/json")
+	(*w).Write(jsonData)
+
+	return nil
 }
