@@ -4,7 +4,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"sort"
@@ -36,7 +35,11 @@ func main() {
 		os.Exit(0)
 	}
 	// вывести отображение файлов
-	printFiles(directorySource, sortBy)
+	err = printFiles(directorySource, sortBy)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(0)
+	}
 
 	fmt.Printf("Время работы программы: %v\n", time.Now().Sub(startTime))
 }
@@ -96,7 +99,10 @@ func addInnerEntityFromDirectory(dir string, files *[]FileInfo) error {
 		}
 
 		if entry.IsDir() {
-			filesSize := getDirSize(filepath.Join(dir, entry.Name()))
+			filesSize, err := getDirSize(filepath.Join(dir, entry.Name()))
+			if err != nil {
+				fmt.Println(err)
+			}
 			*files = append(*files, FileInfo{
 				Type: "папка",
 				Name: entry.Name(),
@@ -121,11 +127,10 @@ func addInnerEntityFromDirectory(dir string, files *[]FileInfo) error {
 
 // getDirSize - функция подсчета размера элементов, если это файл его размер суммируется с общим размером папки,
 // если это папка то метод рекурсивно заходит в нее и возвращается ощую сумму элементов по тому же принципу
-func getDirSize(dir string) int64 {
+func getDirSize(dir string) (int64, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		fmt.Println(err)
-		return 0
+		return 0, err
 	}
 
 	var size int64 = 0
@@ -137,16 +142,21 @@ func getDirSize(dir string) int64 {
 		}
 
 		if entry.IsDir() {
-			size += getDirSize(filepath.Join(dir, entry.Name()))
+			fileSize, err := getDirSize(filepath.Join(dir, entry.Name()))
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			size += fileSize
 		} else {
 			size += info.Size()
 		}
 	}
-	return size
+	return size, nil
 }
 
 // sortFiles - метод который по принципу описания анонимной функции в sort.Slice описывается поведения для меньшего элемента
-func sortFiles(files []FileInfo, sortBy string) {
+func sortFiles(files []FileInfo, sortBy string) error {
 	switch sortBy {
 	case "ASC":
 		sort.Slice(files, func(i, j int) bool {
@@ -157,31 +167,40 @@ func sortFiles(files []FileInfo, sortBy string) {
 			return files[i].Size > files[j].Size
 		})
 	default:
-		fmt.Println("Invalid sortBy value")
+		return errors.New("Invalid sortBy value")
 	}
+	return nil
 }
 
 // printFiles - метод вывода по шаблону заполненного массива, прошедшего сортировку
-func printFiles(directorySource string, sortBy string) {
+func printFiles(directorySource string, sortBy string) error {
 	files := []FileInfo{}
-	addInnerEntityFromDirectory(directorySource, &files)
-	sortFiles(files, sortBy)
-	for _, file := range files {
-		fmt.Printf("%s | %s | %s\n", file.Type, file.Name, formatSize(file.Size))
+	err := addInnerEntityFromDirectory(directorySource, &files)
+	if err != nil {
+		return err
 	}
+	err = sortFiles(files, sortBy)
+	if err != nil {
+		return err
+	}
+	for _, file := range files {
+		fmt.Printf("%s | %s | %s\n", file.Type, file.Name, mustFormatSize(file.Size))
+	}
+	return nil
 }
 
 // formatSize - метод, который переводит байты в понятные единицы измерения гб, мб, кб
 // метод определяет сколько раз кол-во байт можно поделить на 1024 тем самым определяет ед. измерения
-func formatSize(size int64) string {
+func mustFormatSize(size int64) string {
 	const unit = 1024
 	if size < unit {
 		return fmt.Sprintf("%d B", size)
 	}
-	div, exp := int64(unit), 0
-	for n := size / unit; n >= unit; n /= unit {
-		div *= unit
+	n, exp := float64(size), 0
+	for n > 1024 {
+		n /= 1024
 		exp++
 	}
-	return fmt.Sprintf("%.1f %cB", float64(size)/math.Pow(float64(unit), float64(exp)), " KMGTPE"[exp])
+	fmt.Println(size, size/unit, exp)
+	return fmt.Sprintf("%.1f %cB", n, " KMGTPE"[exp])
 }
