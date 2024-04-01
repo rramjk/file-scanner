@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 )
 
@@ -76,7 +77,9 @@ func DirectorySrcAndSortedParamIsCorrect(directorySource string, sortBy string) 
 	return nil
 }
 
-func walkDir(dir string, files *[]FileInfo) {
+func addInnerEntityFromDirectory(dir string, files *[]FileInfo, wg *sync.WaitGroup, mu *sync.Mutex) {
+	defer wg.Done()
+
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		fmt.Println(err)
@@ -84,40 +87,42 @@ func walkDir(dir string, files *[]FileInfo) {
 	}
 
 	for _, entry := range entries {
-		_, err := entry.Info()
+		info, err := entry.Info()
 		if err != nil {
 			fmt.Println(err)
 			continue
 		}
 
 		if entry.IsDir() {
-			filesSize := getDirSize(filepath.Join(dir, entry.Name()))
-			*files = append(*files, FileInfo{
-				Type: "папка",
-				Name: entry.Name(),
-				Size: filesSize,
-				Path: filepath.Join(dir, entry.Name()),
-			})
+			wg.Add(1)
+			go getDirSize(filepath.Join(dir, entry.Name()), files, wg, mu)
 		} else {
-			filesSize, err := os.Stat(filepath.Join(dir, entry.Name()))
-			if err != nil {
-				fmt.Println(err)
-			}
+			mu.Lock()
 			*files = append(*files, FileInfo{
 				Type: "файл",
 				Name: entry.Name(),
-				Size: filesSize.Size(),
+				Size: info.Size(),
 				Path: filepath.Join(dir, entry.Name()),
 			})
+			mu.Unlock()
 		}
 	}
 }
 
-func getDirSize(dir string) int64 {
+func getSumBytesfromChannel(ch *chan int64) int64 {
+	var sum int64 = 0
+	for i := 0; i < len(*ch); i++ {
+		sum += <-*ch
+	}
+	return sum
+}
+func getDirSize(dir string, files *[]FileInfo, wg *sync.WaitGroup, mu *sync.Mutex) {
+	defer wg.Done()
+
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		fmt.Println(err)
-		return 0
+		return
 	}
 
 	var size int64 = 0
@@ -129,12 +134,21 @@ func getDirSize(dir string) int64 {
 		}
 
 		if entry.IsDir() {
-			size += getDirSize(filepath.Join(dir, entry.Name()))
+			wg.Add(1)
+			go getDirSize(filepath.Join(dir, entry.Name()), files, wg, mu)
 		} else {
 			size += info.Size()
 		}
 	}
-	return size
+
+	mu.Lock()
+	*files = append(*files, FileInfo{
+		Type: "папка",
+		Name: filepath.Base(dir),
+		Size: size,
+		Path: dir,
+	})
+	mu.Unlock()
 }
 
 func sortFiles(files []FileInfo, sortBy string) {
@@ -153,8 +167,18 @@ func sortFiles(files []FileInfo, sortBy string) {
 }
 
 func printFiles(directorySource string, sortBy string) {
-	files := []FileInfo{}
-	walkDir(directorySource, &files)
+	var files []FileInfo
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	wg.Add(1)
+	go addInnerEntityFromDirectory(directorySource, &files, &wg, &mu)
+
+	wg.Wait()
+	for _, file := range files {
+		fmt.Printf("%s | %s | %s\n", file.Type, file.Name, formatSize(file.Size))
+	}
+	fmt.Println("--------SORTED--------")
 	sortFiles(files, sortBy)
 	for _, file := range files {
 		fmt.Printf("%s | %s | %s\n", file.Type, file.Name, formatSize(file.Size))
