@@ -12,9 +12,13 @@ import (
 
 // единичный элемент, либо папка либо файл
 type FileInfo struct {
+	// тип файл или папка
 	Type string
+	// название элемента
 	Name string
+	// размер элементв
 	Size int64
+	// путь к элементу
 	Path string
 }
 
