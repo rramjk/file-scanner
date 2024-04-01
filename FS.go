@@ -35,7 +35,7 @@ func main() {
 		fmt.Println(err)
 		os.Exit(0)
 	}
-	printFiles(directorySource, sortBy)
+	printFilesSortedByParam(directorySource, sortBy)
 
 	fmt.Printf("Время работы программы: %v\n", time.Now().Sub(startTime))
 }
@@ -77,6 +77,7 @@ func DirectorySrcAndSortedParamIsCorrect(directorySource string, sortBy string) 
 	return nil
 }
 
+// addInnerEntityFromDirectory - метод заполняет срез объектов элементами дирректории(файлами папками)
 func addInnerEntityFromDirectory(dir string, files *[]FileInfo, wg *sync.WaitGroup, mu *sync.Mutex) {
 	defer wg.Done()
 
@@ -95,7 +96,7 @@ func addInnerEntityFromDirectory(dir string, files *[]FileInfo, wg *sync.WaitGro
 		level := 1
 		if entry.IsDir() {
 			wg.Add(1)
-			go getDirSize(filepath.Join(dir, entry.Name()), files, wg, mu, level)
+			go addFolderWithFullInnerElementSize(filepath.Join(dir, entry.Name()), files, wg, mu, level)
 		} else {
 			mu.Lock()
 			*files = append(*files, FileInfo{
@@ -109,14 +110,10 @@ func addInnerEntityFromDirectory(dir string, files *[]FileInfo, wg *sync.WaitGro
 	}
 }
 
-func getSumBytesfromChannel(ch *chan int64) int64 {
-	var sum int64 = 0
-	for i := 0; i < len(*ch); i++ {
-		sum += <-*ch
-	}
-	return sum
-}
-func getDirSize(dir string, files *[]FileInfo, wg *sync.WaitGroup, mu *sync.Mutex, level int) {
+// addFolderWithFullInnerElementSize - данный метод является инструкцией для потока.
+// Метод проходится по полученной дирректории, если это первый уровень вложенности, то сразу добавляет дирректорию в срез, иначе он лишь
+// суммирует к размеру дирректории размер файлов вложенных в нее
+func addFolderWithFullInnerElementSize(dir string, files *[]FileInfo, wg *sync.WaitGroup, mu *sync.Mutex, level int) {
 	defer wg.Done()
 
 	entries, err := os.ReadDir(dir)
@@ -135,7 +132,7 @@ func getDirSize(dir string, files *[]FileInfo, wg *sync.WaitGroup, mu *sync.Mute
 
 		if entry.IsDir() {
 			wg.Add(1)
-			go getDirSize(filepath.Join(dir, entry.Name()), files, wg, mu, level+1)
+			go addFolderWithFullInnerElementSize(filepath.Join(dir, entry.Name()), files, wg, mu, level+1)
 		} else {
 			size += info.Size()
 		}
@@ -171,7 +168,8 @@ func sortFiles(files []FileInfo, sortBy string) {
 	}
 }
 
-func printFiles(directorySource string, sortBy string) {
+// printFilesSortedByParam - проходится по дирректории, сортирует папки и файлы и выводит их
+func printFilesSortedByParam(directorySource string, sortBy string) {
 	var files []FileInfo
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -185,6 +183,8 @@ func printFiles(directorySource string, sortBy string) {
 		fmt.Printf("%s | %s | %s\n", file.Type, file.Name, formatSize(file.Size))
 	}
 }
+
+// formatSize - медот подсчитывает кратность числа характеризующего байты и после чего выбирает неободимую СС
 func formatSize(size int64) string {
 	const unit = 1024
 	if size < unit {
