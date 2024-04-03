@@ -3,26 +3,19 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
+	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
-	"sync"
 	"time"
 )
 
-// единичный элемент, либо папка либо файл
 type FileInfo struct {
-	// тип файл или папка
-	Type string
-	// название элемента
-	Name string
-	// размер элемента
-	Size int64
-	// путь к элементу
-	Path string
+	Name  string
+	Size  int64
+	IsDir bool
 }
 
 var noSuchDirectoryError = errors.New("Директории не существует")
@@ -43,7 +36,7 @@ func main() {
 	fmt.Printf("Время работы программы: %v\n", time.Now().Sub(startTime))
 }
 
-// Обработчик для GET-запросов
+// filesHandler - обработчик для GET-запросов
 func filesHandler(w http.ResponseWriter, r *http.Request) {
 	// Проверяем, что запрос является GET-запросом
 	if r.Method != http.MethodGet {
@@ -54,201 +47,141 @@ func filesHandler(w http.ResponseWriter, r *http.Request) {
 	// Получаем параметры запроса
 	rootParam := r.URL.Query().Get("root")
 	sortParam := r.URL.Query().Get("sort")
-	fmt.Print(fmt.Sprintf("%s %s", rootParam, sortParam))
+
 	if rootParam == "" {
 		fmt.Fprint(w, "Введите параметры root and sort! ?root=&sort=(ASC default)")
-	} else {
-		if sortParam == rootParam || sortParam == "" {
-			sortParam = "ASC"
-		}
-		sortParam = "ASC"
-		fmt.Println(sortParam)
-		err := showFile(&w, rootParam, sortParam)
-
-		if err != nil {
-			fmt.Println(err)
-		}
+		return
 	}
+	if sortParam == rootParam || sortParam == "" {
+		sortParam = "ASC"
+	}
+	err := convertAndSendFilesIntoRootToServer(&w, rootParam, sortParam)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
 }
 
-func showFile(w *http.ResponseWriter, dirSource string, sort string) error {
+// git commit -m "reform global logic in app"
+/*
+convertAndSendFilesIntoRootToServer - данный метод получает на вход путь к директории и параметр сортировки
+после чего получает все элементы в папке, сортирует их и отправляет их на сервер в формате JSON
+*/
+func convertAndSendFilesIntoRootToServer(w *http.ResponseWriter, dirSource string, sort string) error {
 	// путь для предполагаемогой дирректории
 	directorySource := dirSource
 	sortBy := sort
-	fmt.Print(fmt.Sprintf("%s %s", directorySource, sortBy))
+
 	// вывести отображение файлов
-	err := printFiles(w, directorySource, sortBy)
+	fileList, err := getDirectoryContents(directorySource)
+	if err != nil {
+		return err
+	}
+	mustSortDirectoryContents(fileList, sortBy)
+	err = sendJsonViewOnServer(w, fileList)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-// parseParam - получение параметров с вызова программы
-func parseParam(directorySource *string, sortBy *string) error {
-	flag.StringVar(directorySource, "root", "null", "source of directory")
-	flag.StringVar(sortBy, "sort", "ASC", "param from sort")
-	flag.Parse()
+// getDirectoryContents - собирает все вложенные элементы по пути указанному в параметр
+func getDirectoryContents(dirPath string) ([]FileInfo, error) {
+	var fileList []FileInfo
 
-	// проверка на корректность полученных параметров
-	err := directorySrcAndSortedParamIsCorrect(*directorySource, *sortBy)
+	// Читаем содержимое директории
+	files, err := ioutil.ReadDir(dirPath)
 	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// directorySrcAndSortedParamIsCorrect - проверка необходимой дирректории на корректность
-// (true - root: удачный путь к файлу sort: корректная папка)
-func directorySrcAndSortedParamIsCorrect(directorySource string, sortBy string) error {
-	if directorySource == "null" || (sortBy != "ASC" && sortBy != "DESC") {
-		return errors.New("Источник или параметр сортировки указаны не верно\n./FS --root='path to directory' --sort='param of sort (default ASC)'")
-	}
-	// тестовое получение папки если оно удачно значит создавать новую папку не стоит
-	drtInfo, drtErr := os.Stat(directorySource)
-	if (directorySource[:1] == "/" || directorySource[:2] == "./") && drtErr != nil {
-		return noSuchDirectoryError
-	}
-	if drtErr != nil {
-		if os.IsNotExist(drtErr) {
-			return errors.New("Директория не существует")
-		} else {
-			return errors.New("Ошибка получения информации о директории")
-		}
-	}
-	if !(drtInfo.IsDir()) {
-		return errors.New("Параметр --root должен содержать путь к папке")
-	}
-	return nil
-}
-
-// addInnerEntityFromDirectory - метод заполняет срез объектов элементами дирректории(файлами папками)
-func addInnerEntityFromDirectory(dir string, files *[]FileInfo, wg *sync.WaitGroup, mu *sync.Mutex) error {
-	defer wg.Done()
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return err
+		return nil, err
 	}
 
-	for _, entry := range entries {
-		info, err := entry.Info()
+	// Проходим по файлам и папкам верхнего уровня
+	for _, file := range files {
+		fileSize, err := calculateSize(filepath.Join(dirPath, file.Name()), file)
 		if err != nil {
-			fmt.Println(err)
-			continue
+			return nil, err
 		}
-		level := 1
-		if entry.IsDir() {
-			wg.Add(1)
-			go addFolderWithFullInnerElementSize(filepath.Join(dir, entry.Name()), files, wg, mu, level)
-		} else {
-			mu.Lock()
-			*files = append(*files, FileInfo{
-				Type: "файл",
-				Name: entry.Name(),
-				Size: info.Size(),
-				Path: filepath.Join(dir, entry.Name()),
-			})
-			mu.Unlock()
-		}
+		fileList = append(fileList, FileInfo{
+			Name:  file.Name(),
+			Size:  fileSize,
+			IsDir: file.IsDir(),
+		})
 	}
-	return nil
+
+	return fileList, nil
 }
 
-// addFolderWithFullInnerElementSize - данный метод является инструкцией для потока.
-// Метод проходится по полученной дирректории, если это первый уровень вложенности, то сразу добавляет дирректорию в срез, иначе он лишь
-// суммирует к размеру дирректории размер файлов вложенных в нее
-func addFolderWithFullInnerElementSize(dir string, files *[]FileInfo, wg *sync.WaitGroup, mu *sync.Mutex, level int) error {
-	defer wg.Done()
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return err
+// calculateSize - подсчитывает размер файла или вложенных в папку элементов
+func calculateSize(path string, info os.FileInfo) (int64, error) {
+	if !info.IsDir() {
+		return info.Size(), nil
 	}
 
-	var size int64 = 0
-	for _, entry := range entries {
-		info, err := entry.Info()
+	var size int64
+	// Используем filepath.Walk для вычисления размера папки
+	_ = filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			fmt.Println(err)
-			continue
+			return err
 		}
+		size += info.Size()
+		return nil
+	})
 
-		if entry.IsDir() {
-			wg.Add(1)
-			go addFolderWithFullInnerElementSize(filepath.Join(dir, entry.Name()), files, wg, mu, level+1)
-		} else {
-			size += info.Size()
-		}
-	}
-	if level == 1 {
-		mu.Lock()
-		*files = append(*files, FileInfo{
-			Type: "папка",
-			Name: filepath.Base(dir),
-			Size: size,
-			Path: dir,
-		})
-		mu.Unlock()
-	} else {
-		mu.Lock()
-		(*files)[len((*files))-1].Size += size
-		mu.Unlock()
-	}
-	return nil
+	return size, nil
 }
 
-// sortFiles - метод который по принципу описания анонимной функции в sort.Slice описывается поведения для меньшего элемента
-func sortFiles(files []FileInfo, sortBy string) error {
-	switch sortBy {
-	case "ASC":
-		sort.Slice(files, func(i, j int) bool {
-			return files[i].Size < files[j].Size
-		})
-	case "DESC":
-		sort.Slice(files, func(i, j int) bool {
-			return files[i].Size > files[j].Size
-		})
+// mustSortDirectoryContents - метод сортирует полученные элементы согласно параметру сортировки
+func mustSortDirectoryContents(fileList []FileInfo, sortBy string) {
+	sort.Slice(fileList, func(i, j int) bool {
+		if sortBy == "ASC" {
+			return fileList[i].Size < fileList[j].Size
+		} else {
+			return fileList[i].Size > fileList[j].Size
+		}
+	})
+}
+
+// formatSize - конвертирует размер из в байт в более понятную систему счисления
+func formatSize(size int64) string {
+	const (
+		KB = 1 << 10
+		MB = 1 << 20
+		GB = 1 << 30
+	)
+
+	switch {
+	case size >= GB:
+		return fmt.Sprintf("%.2f GB", float64(size)/float64(GB))
+	case size >= MB:
+		return fmt.Sprintf("%.2f MB", float64(size)/float64(MB))
+	case size >= KB:
+		return fmt.Sprintf("%.2f KB", float64(size)/float64(KB))
 	default:
-		return errors.New("Invalid sortBy value")
+		return fmt.Sprintf("%d bytes", size)
 	}
-	return nil
 }
 
-// printFiles - метод вывода по шаблону заполненного массива, прошедшего сортировку
-func printFiles(w *http.ResponseWriter, directorySource string, sortBy string) error {
-	var files []FileInfo
-	var wg sync.WaitGroup
-	var mu sync.Mutex
+// sendJsonViewOnServer - метод выводит данные для проверки и отправляет их на сервер в формате JSON
+func sendJsonViewOnServer(w *http.ResponseWriter, fileList []FileInfo) error {
+	// var wg sync.WaitGroup
+	// var mu sync.Mutex
 
-	wg.Add(1)
-	go addInnerEntityFromDirectory(directorySource, &files, &wg, &mu)
-	wg.Wait()
-	err := sortFiles(files, sortBy)
+	for _, fileInfo := range fileList {
+		itemType := "файл"
+		if fileInfo.IsDir {
+			itemType = "папка"
+		}
+		fmt.Printf("%s | %s | %s\n", itemType, fileInfo.Name, formatSize(fileInfo.Size))
+	}
+	err := sendJson(w, &fileList)
 	if err != nil {
 		return err
 	}
-
-	sendJson(w, &files)
 	return nil
-
 }
 
-// formatSize - метод, который переводит байты в понятные единицы измерения гб, мб, кб
-// метод определяет сколько раз кол-во байт можно поделить на 1024 тем самым определяет ед. измерения
-func mustFormatSize(size int64) string {
-	const unit = 1024
-	if size < unit {
-		return fmt.Sprintf("%d B", size)
-	}
-	n, exp := float64(size), 0
-	for n > 1024 {
-		n /= 1024
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", n, " KMGTPE"[exp])
-}
-
+// sendJson - отправляет данные на сервер в формате JSON
 func sendJson(w *http.ResponseWriter, files *[]FileInfo) error {
 	jsonData, err := json.Marshal(files)
 	if err != nil {
