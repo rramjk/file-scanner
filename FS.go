@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"filescanpack/filescanpack"
@@ -8,26 +9,52 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 )
 
 func main() {
 	// получаем время начала программы
 	startTime := time.Now()
+
+	// Создаем контекст, который может быть отменен
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Устанавливаем обработчик для корневого пути
 	http.HandleFunc("/files", filesHandler)
+
 	port, err := getPort()
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+
 	// Запускаем HTTP-сервер на порту 8080
-	fmt.Println(fmt.Sprintf("Запуск сервера на http://localhost:%s", port))
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		fmt.Printf("Ошибка при запуске сервера: %v\n", err)
-		os.Exit(1)
-	}
+	fmt.Println("Запуск сервера на http://localhost:" + port)
+
+	srv := &http.Server{Addr: ":" + port}
+
+	// Запускаем сервер в отдельном горутине
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			fmt.Printf("Ошибка при запуске сервера: %v\n", err)
+			os.Exit(1)
+		}
+	}()
+
+	// Канал для сигналов прерывания (CTRL+C)
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	// Ожидаем сигнал прерывания
+	<-sigChan
+
+	// Завершаем работу сервера
+	fmt.Println("\nЗавершаем работу сервера...")
+	srv.Shutdown(ctx)
 
 	fmt.Printf("Время работы программы: %v\n", time.Now().Sub(startTime))
 }
@@ -83,8 +110,6 @@ func convertAndSendFilesIntoRootToServer(w *http.ResponseWriter, dirSource strin
 
 // sendJsonViewOnServer - метод выводит данные для проверки и отправляет их на сервер в формате JSON
 func sendJsonViewOnServer(w *http.ResponseWriter, fileList []filescanpack.FileInfo) error {
-	// var wg sync.WaitGroup
-	// var mu sync.Mutex
 	for _, fileInfo := range fileList {
 		itemType := "файл"
 		if fileInfo.IsDir {

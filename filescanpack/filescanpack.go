@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 )
 
 type FileInfo struct {
@@ -24,18 +25,34 @@ func GetDirectoryContents(dirPath string) ([]FileInfo, error) {
 		return nil, err
 	}
 
+	// Создаем WaitGroup для ожидания завершения всех горутин
+	var wg sync.WaitGroup
+
+	// Создаем мьютекс для безопасного доступа к fileList
+	var mu sync.Mutex
+
 	// Проходим по файлам и папкам верхнего уровня
 	for _, file := range files {
-		fileSize, err := calculateSize(filepath.Join(dirPath, file.Name()), file)
-		if err != nil {
-			return nil, err
-		}
-		fileList = append(fileList, FileInfo{
-			Name:  file.Name(),
-			Size:  fileSize,
-			IsDir: file.IsDir(),
-		})
+		wg.Add(1)
+		go func(file os.FileInfo) {
+			defer wg.Done()
+			fileSize, err := calculateSize(filepath.Join(dirPath, file.Name()), file)
+			if err != nil {
+				fmt.Printf("Ошибка при вычислении размера: %v\n", err)
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			fileList = append(fileList, FileInfo{
+				Name:  file.Name(),
+				Size:  fileSize,
+				IsDir: file.IsDir(),
+			})
+		}(file)
 	}
+
+	// Ждем, пока все горутины завершат свою работу
+	wg.Wait()
 
 	return fileList, nil
 }
