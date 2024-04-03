@@ -3,23 +3,14 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"filescanpack/filescanpack"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
-	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 )
-
-type FileInfo struct {
-	Name  string
-	Size  int64
-	IsDir bool
-}
-
-var noSuchDirectoryError = errors.New("Директории не существует")
 
 func main() {
 	// получаем время начала программы
@@ -76,13 +67,13 @@ func convertAndSendFilesIntoRootToServer(w *http.ResponseWriter, dirSource strin
 	// путь для предполагаемогой дирректории
 	directorySource := dirSource
 	sortBy := sort
-
 	// вывести отображение файлов
-	fileList, err := getDirectoryContents(directorySource)
+	fileList, err := filescanpack.GetDirectoryContents(directorySource)
+
 	if err != nil {
 		return err
 	}
-	mustSortDirectoryContents(fileList, sortBy)
+	filescanpack.MustSortDirectoryContents(fileList, sortBy)
 	err = sendJsonViewOnServer(w, fileList)
 	if err != nil {
 		return err
@@ -90,93 +81,16 @@ func convertAndSendFilesIntoRootToServer(w *http.ResponseWriter, dirSource strin
 	return nil
 }
 
-// getDirectoryContents - собирает все вложенные элементы по пути указанному в параметр
-func getDirectoryContents(dirPath string) ([]FileInfo, error) {
-	var fileList []FileInfo
-
-	// Читаем содержимое директории
-	files, err := ioutil.ReadDir(dirPath)
-	if err != nil {
-		return nil, err
-	}
-
-	// Проходим по файлам и папкам верхнего уровня
-	for _, file := range files {
-		fileSize, err := calculateSize(filepath.Join(dirPath, file.Name()), file)
-		if err != nil {
-			return nil, err
-		}
-		fileList = append(fileList, FileInfo{
-			Name:  file.Name(),
-			Size:  fileSize,
-			IsDir: file.IsDir(),
-		})
-	}
-
-	return fileList, nil
-}
-
-// calculateSize - подсчитывает размер файла или вложенных в папку элементов
-func calculateSize(path string, info os.FileInfo) (int64, error) {
-	if !info.IsDir() {
-		return info.Size(), nil
-	}
-
-	var size int64
-	// Используем filepath.Walk для вычисления размера папки
-	_ = filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		size += info.Size()
-		return nil
-	})
-
-	return size, nil
-}
-
-// mustSortDirectoryContents - метод сортирует полученные элементы согласно параметру сортировки
-func mustSortDirectoryContents(fileList []FileInfo, sortBy string) {
-	sort.Slice(fileList, func(i, j int) bool {
-		if sortBy == "ASC" {
-			return fileList[i].Size < fileList[j].Size
-		} else {
-			return fileList[i].Size > fileList[j].Size
-		}
-	})
-}
-
-// formatSize - конвертирует размер из в байт в более понятную систему счисления
-func formatSize(size int64) string {
-	const (
-		KB = 1 << 10
-		MB = 1 << 20
-		GB = 1 << 30
-	)
-
-	switch {
-	case size >= GB:
-		return fmt.Sprintf("%.2f GB", float64(size)/float64(GB))
-	case size >= MB:
-		return fmt.Sprintf("%.2f MB", float64(size)/float64(MB))
-	case size >= KB:
-		return fmt.Sprintf("%.2f KB", float64(size)/float64(KB))
-	default:
-		return fmt.Sprintf("%d bytes", size)
-	}
-}
-
 // sendJsonViewOnServer - метод выводит данные для проверки и отправляет их на сервер в формате JSON
-func sendJsonViewOnServer(w *http.ResponseWriter, fileList []FileInfo) error {
+func sendJsonViewOnServer(w *http.ResponseWriter, fileList []filescanpack.FileInfo) error {
 	// var wg sync.WaitGroup
 	// var mu sync.Mutex
-
 	for _, fileInfo := range fileList {
 		itemType := "файл"
 		if fileInfo.IsDir {
 			itemType = "папка"
 		}
-		fmt.Printf("%s | %s | %s\n", itemType, fileInfo.Name, formatSize(fileInfo.Size))
+		fmt.Printf("%s | %s | %s\n", itemType, fileInfo.Name, filescanpack.FormatSize(fileInfo.Size))
 	}
 	err := sendJson(w, &fileList)
 	if err != nil {
@@ -186,7 +100,7 @@ func sendJsonViewOnServer(w *http.ResponseWriter, fileList []FileInfo) error {
 }
 
 // sendJson - отправляет данные на сервер в формате JSON
-func sendJson(w *http.ResponseWriter, files *[]FileInfo) error {
+func sendJson(w *http.ResponseWriter, files *[]filescanpack.FileInfo) error {
 	jsonData, err := json.Marshal(files)
 	if err != nil {
 		return err
