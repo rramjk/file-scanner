@@ -63,7 +63,6 @@ func filesHandler(w http.ResponseWriter, r *http.Request) {
 
 }
 
-// git commit -m "reform global logic in app"
 /*
 convertAndSendFilesIntoRootToServer - данный метод получает на вход путь к директории и параметр сортировки
 после чего получает все элементы в папке, сортирует их и отправляет их на сервер в формате JSON
