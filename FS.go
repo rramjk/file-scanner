@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -25,10 +26,14 @@ func main() {
 	startTime := time.Now()
 	// Устанавливаем обработчик для корневого пути
 	http.HandleFunc("/files", filesHandler)
-
+	port, err := getPort()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 	// Запускаем HTTP-сервер на порту 8080
-	fmt.Println("Запуск сервера на http://localhost:8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	fmt.Println(fmt.Sprintf("Запуск сервера на http://localhost:%s", port))
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		fmt.Printf("Ошибка при запуске сервера: %v\n", err)
 		os.Exit(1)
 	}
@@ -190,4 +195,16 @@ func sendJson(w *http.ResponseWriter, files *[]FileInfo) error {
 	(*w).Write(jsonData)
 
 	return nil
+}
+
+func getPort() (string, error) {
+	data, err := ioutil.ReadFile("./resources/port.config")
+	if err != nil {
+		return "", err
+	}
+	port := strings.TrimSpace(string(data)) // Удаляем пробелы и символы новой строки
+	if port == "" {
+		return "", errors.New("Ошибка указания порта, скорректируйте файл port.config")
+	}
+	return port, nil
 }
