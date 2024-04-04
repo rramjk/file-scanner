@@ -9,10 +9,26 @@ import (
 	"sync"
 )
 
+type Stringer interface {
+	String() string
+}
+
+// FileInfo - объект файловой системы
 type FileInfo struct {
-	Name  string
-	Size  int64
+	// название элемента
+	Name string
+	// размера элемента в байтах
+	Size int64
+	// папка или файл (true or false)
 	IsDir bool
+}
+
+func (f FileInfo) String() string {
+	if f.IsDir {
+		return fmt.Sprintf("Папка | %s | %s", f.Name, FormatSize(f.Size))
+	} else {
+		return fmt.Sprintf("Файл | %s | %s", f.Name, FormatSize(f.Size))
+	}
 }
 
 // getDirectoryContents - собирает все вложенные элементы по пути указанному в параметр
@@ -87,21 +103,23 @@ func MustSortDirectoryContents(fileList []FileInfo, sortBy string) {
 	})
 }
 
+// добавить перевод файлов в кб мб гб
 // formatSize - конвертирует размер из в байт в более понятную систему счисления
 func FormatSize(size int64) string {
-	const (
-		KB = 1 << 10
-		MB = 1 << 20
-		GB = 1 << 30
-	)
+	n := float64(size)
+	i := 0
 
+	for n >= 1024 {
+		i++
+		n /= 1024
+	}
 	switch {
-	case size >= GB:
-		return fmt.Sprintf("%.2f GB", float64(size)/float64(GB))
-	case size >= MB:
-		return fmt.Sprintf("%.2f MB", float64(size)/float64(MB))
-	case size >= KB:
-		return fmt.Sprintf("%.2f KB", float64(size)/float64(KB))
+	case i == 1:
+		return fmt.Sprintf("%.2f KB", n)
+	case i == 2:
+		return fmt.Sprintf("%.2f MB", n)
+	case i == 3:
+		return fmt.Sprintf("%.2f GB", n)
 	default:
 		return fmt.Sprintf("%d bytes", size)
 	}

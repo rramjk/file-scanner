@@ -25,7 +25,7 @@ func main() {
 
 	// Устанавливаем обработчик для корневого пути
 	http.HandleFunc("/files", filesHandler)
-
+	http.Handle("/files/ui/", http.StripPrefix("/files/ui/", http.FileServer(http.Dir("./ui"))))
 	port, err := getPort()
 	if err != nil {
 		fmt.Println(err)
@@ -111,12 +111,9 @@ func convertAndSendFilesIntoRootToServer(w *http.ResponseWriter, dirSource strin
 // sendJsonViewOnServer - метод выводит данные для проверки и отправляет их на сервер в формате JSON
 func sendJsonViewOnServer(w *http.ResponseWriter, fileList []filescanpack.FileInfo) error {
 	for _, fileInfo := range fileList {
-		itemType := "файл"
-		if fileInfo.IsDir {
-			itemType = "папка"
-		}
-		fmt.Printf("%s | %s | %s\n", itemType, fileInfo.Name, filescanpack.FormatSize(fileInfo.Size))
+		fmt.Println(fileInfo.String())
 	}
+
 	err := sendJson(w, &fileList)
 	if err != nil {
 		return err
