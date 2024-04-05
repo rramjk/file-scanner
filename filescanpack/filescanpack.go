@@ -2,7 +2,6 @@ package filescanpack
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sort"
@@ -36,7 +35,7 @@ func GetDirectoryContents(dirPath string) ([]FileInfo, error) {
 	var fileList []FileInfo
 
 	// Читаем содержимое директории
-	files, err := ioutil.ReadDir(dirPath)
+	files, err := os.ReadDir(dirPath)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +49,7 @@ func GetDirectoryContents(dirPath string) ([]FileInfo, error) {
 	// Проходим по файлам и папкам верхнего уровня
 	for _, file := range files {
 		wg.Add(1)
-		go func(file os.FileInfo) {
+		go func(file os.DirEntry) {
 			defer wg.Done()
 			fileSize, err := calculateSize(filepath.Join(dirPath, file.Name()), file)
 			if err != nil {
@@ -74,7 +73,12 @@ func GetDirectoryContents(dirPath string) ([]FileInfo, error) {
 }
 
 // calculateSize - подсчитывает размер файла или вложенных в папку элементов
-func calculateSize(path string, info os.FileInfo) (int64, error) {
+func calculateSize(path string, inf os.DirEntry) (int64, error) {
+	info, err := inf.Info()
+	if err != nil {
+		return 0, err
+	}
+
 	if !info.IsDir() {
 		return info.Size(), nil
 	}
