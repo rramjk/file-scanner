@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -25,6 +26,7 @@ func main() {
 
 	// Устанавливаем обработчик для корневого пути
 	http.HandleFunc("/files", filesHandler)
+	http.HandleFunc("/", htmlHandler)
 	http.Handle("/files/ui/", http.StripPrefix("/files/ui/", http.FileServer(http.Dir("./ui"))))
 	port, err := getPort()
 	if err != nil {
@@ -84,6 +86,21 @@ func filesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+}
+func htmlHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	htmlFile, err := os.Open("./ui/index_page.html")
+	if err != nil {
+		http.Error(w, "Не удалось открыть файл!", http.StatusInternalServerError)
+		return
+	}
+	defer htmlFile.Close()
+
+	scanner := bufio.NewScanner(htmlFile)
+	for scanner.Scan() {
+		w.Write(scanner.Bytes())
+	}
 }
 
 /*
