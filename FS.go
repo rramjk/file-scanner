@@ -25,7 +25,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/files", filesHandler)
 	mux.Handle("/", http.FileServer(http.Dir("./ui")))
-	mux.Handle("/ui/", http.StripPrefix("/ui/", http.FileServer(http.Dir("../ui"))))
+	mux.Handle("/ui/", http.StripPrefix("/ui/", http.FileServer(http.Dir("./ui"))))
 
 	port, err := getPort()
 	if err != nil {
@@ -48,9 +48,6 @@ func main() {
 		}
 
 	}()
-
-	fmt.Printf("Сервер запущен на http://localhost:%v\n", port)
-
 	<-ctx.Done()
 
 	fmt.Println("\nЗавершаем работу сервера...")
