@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <html>
     <head>
-        <link rel="stylesheet" type="text/css" href="./ui/main.css">
+        <!-- <link rel="stylesheet" type="text/css" href="./ui/main.css"> -->
+        <link rel="stylesheet" type="text/css" href="./main.css"> 
         <title>FileScanner</title>
         <script src="./ui/script.js"></script>
     </head>
@@ -15,59 +16,79 @@
             </div>
         </header>
         <main>
-            <article class="load_time">Время загрузки:</article>
-            <input type="text" value="путь">
-            <button>
-                <a href="/">Назад</a>
-                <a href="/files">Перейти</a>
-            </button>
-            <div class="loaded-view">
-                <ul>
-                    <li>
-                        <article>
-                            ФАЙЛ
-                        </article>
-                        <article>
-                            text1.txt
-                        </article>
-                        <article>
-                            3.2 GB
-                        </article>
-                    </li>
-                    <li>
-                        <article>
-                            ФАЙЛ
-                        </article>
-                        <article>
-                            text1.txt
-                        </article>
-                        <article>
-                            3.2 GB
-                        </article>
-                    </li>
-                    <li>
-                        <article>
-                            ФАЙЛ
-                        </article>
-                        <article>
-                            text1.txt
-                        </article>
-                        <article>
-                            3.2 GB
-                        </article>
-                    </li>
-                    <li>
-                        <article>
-                            ФАЙЛ
-                        </article>
-                        <article>
-                            text1.txt
-                        </article>
-                        <article>
-                            3.2 GB
-                        </article>
-                    </li>
-                </ul>
+            <div class="main-wrap">
+                <div class="main-wrap-header">
+                    <article class="load_time">Время загрузки: <span>911.86ms</span></article>
+                    <input type="text" value="/" placeholder="Путь к папке">
+                    <div class="button">
+                        <a href="/">Назад</a>
+                        <a href="/files">Перейти</a>
+                    </div>
+                </div>
+                <div class="loaded-view">
+                    <ul>
+                        <li>
+                            <a href="/files">
+                                <div class="li">
+                                    <article>
+                                        ФАЙЛ
+                                    </article>
+                                    <article>
+                                        text1.txt
+                                    </article>
+                                    <article>
+                                        3.2 GB
+                                    </article>
+                                </div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/files">
+                                <div class="li">
+                                    <article>
+                                        ФАЙЛ
+                                    </article>
+                                    <article>
+                                        text1.txt
+                                    </article>
+                                    <article>
+                                        3.2 GB
+                                    </article>
+                                </div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/files">
+                                <div class="li">
+                                    <article>
+                                        ФАЙЛ
+                                    </article>
+                                    <article>
+                                        text1.txt
+                                    </article>
+                                    <article>
+                                        3.2 GB
+                                    </article>
+                                </div>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/files">
+                                <div class="li">
+                                    <article>
+                                        ФАЙЛ
+                                    </article>
+                                    <article>
+                                        text1.txt
+                                    </article>
+                                    <article>
+                                        3.2 GB
+                                    </article>
+                                </div>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
             </div>
         </main>
     </body>
